@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -19,34 +19,14 @@ void main() async {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return CupertinoApp(
+      debugShowCheckedModeBanner: false,
       title: 'Authenticator',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
-        ),
-        cardTheme: CardThemeData(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        iconButtonTheme: IconButtonThemeData(
-          style: IconButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
+      theme: CupertinoThemeData(
+        brightness: Brightness.light,
+        primaryColor: CupertinoColors.activeBlue,
+        barBackgroundColor: CupertinoColors.systemGrey6,
+        scaffoldBackgroundColor: CupertinoColors.systemGroupedBackground,
       ),
       home: AuthenticatorHome(),
     );
@@ -93,25 +73,26 @@ class TOTPGenerator {
   static String generateTOTP(String secret, {int digits = 6, int period = 30}) {
     final int timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final int timeStep = timestamp ~/ period;
-    
+
     // Decode base32 secret
     final List<int> secretBytes = _base32Decode(secret);
-    
+
     // Create time-based counter
     final ByteData timeData = ByteData(8);
     timeData.setUint64(0, timeStep, Endian.big);
-    
+
     // HMAC-SHA1
     final Hmac hmac = Hmac(sha1, secretBytes);
     final List<int> hash = hmac.convert(timeData.buffer.asUint8List()).bytes;
-    
+
     // Dynamic truncation
     final int offset = hash[hash.length - 1] & 0x0F;
-    final int truncatedHash = ((hash[offset] & 0x7F) << 24) |
+    final int truncatedHash =
+        ((hash[offset] & 0x7F) << 24) |
         ((hash[offset + 1] & 0xFF) << 16) |
         ((hash[offset + 2] & 0xFF) << 8) |
         (hash[offset + 3] & 0xFF);
-    
+
     final int otp = truncatedHash % pow(10, digits).toInt();
     return otp.toString().padLeft(digits, '0');
   }
@@ -124,24 +105,24 @@ class TOTPGenerator {
   static List<int> _base32Decode(String input) {
     const String base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
     input = input.toUpperCase().replaceAll(RegExp(r'[^A-Z2-7]'), '');
-    
+
     final List<int> output = [];
     int buffer = 0;
     int bitsLeft = 0;
-    
+
     for (int i = 0; i < input.length; i++) {
       final int val = base32Chars.indexOf(input[i]);
       if (val == -1) continue;
-      
+
       buffer = (buffer << 5) | val;
       bitsLeft += 5;
-      
+
       if (bitsLeft >= 8) {
         output.add((buffer >> (bitsLeft - 8)) & 255);
         bitsLeft -= 8;
       }
     }
-    
+
     return output;
   }
 }
@@ -161,11 +142,7 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     String pathStr = path.join(await getDatabasesPath(), 'authenticator.db');
-    return await openDatabase(
-      pathStr,
-      version: 1,
-      onCreate: _onCreate,
-    );
+    return await openDatabase(pathStr, version: 1, onCreate: _onCreate);
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -197,17 +174,13 @@ class DatabaseHelper {
 
   Future<void> insertAccount(TOTPAccount account) async {
     final db = await database;
-    await db.insert(
-      'accounts',
-      {
-        'name': account.name,
-        'issuer': account.issuer,
-        'secret': account.secret,
-        'digits': account.digits,
-        'period': account.period,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('accounts', {
+      'name': account.name,
+      'issuer': account.issuer,
+      'secret': account.secret,
+      'digits': account.digits,
+      'period': account.period,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> deleteAccount(TOTPAccount account) async {
@@ -238,7 +211,9 @@ class DatabaseHelper {
     try {
       final Map<String, dynamic> data = jsonDecode(jsonString);
       final List<dynamic> accountsData = data['accounts'] ?? [];
-      return accountsData.map((accountData) => TOTPAccount.fromJson(accountData)).toList();
+      return accountsData
+          .map((accountData) => TOTPAccount.fromJson(accountData))
+          .toList();
     } catch (e) {
       throw Exception('Invalid JSON format: $e');
     }
@@ -295,54 +270,48 @@ class _AuthenticatorHomeState extends State<AuthenticatorHome> {
   Future<void> _exportData() async {
     try {
       final jsonData = await _dbHelper.exportAccountsToJson();
-      
+
       String? outputFile = await FilePicker.platform.saveFile(
         dialogTitle: 'Export Authenticator Data',
-        fileName: 'authenticator_backup_${DateTime.now().millisecondsSinceEpoch}.json',
+        fileName:
+            'authenticator_backup_${DateTime.now().millisecondsSinceEpoch}.json',
         type: FileType.custom,
         allowedExtensions: ['json'],
         bytes: utf8.encode(jsonData),
       );
 
-      if (outputFile != null) {
-        // File is already written by FilePicker when bytes are provided
-        // No need to write again
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle_rounded, color: Colors.white),
-                  SizedBox(width: 8),
-                  Expanded(child: Text('Data exported successfully')),
-                ],
+      if (outputFile != null && mounted) {
+        // Show success dialog
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: Text("Success"),
+            content: Text("Data exported successfully."),
+            actions: [
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.pop(ctx),
+                child: Text("OK"),
               ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
+            ],
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error_rounded, color: Colors.white),
-                SizedBox(width: 8),
-                Expanded(child: Text('Export failed: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+        // Show error dialog
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: Text("Error"),
+            content: Text("Export failed: $e"),
+            actions: [
+              CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.pop(ctx),
+                child: Text("OK"),
+              ),
+            ],
           ),
         );
       }
@@ -360,44 +329,47 @@ class _AuthenticatorHomeState extends State<AuthenticatorHome> {
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
         final jsonString = await file.readAsString();
-        
-        final importedAccounts = await _dbHelper.importAccountsFromJson(jsonString);
-        
+        final importedAccounts = await _dbHelper.importAccountsFromJson(
+          jsonString,
+        );
+
         if (mounted) {
-          showDialog(
+          showCupertinoDialog(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (ctx) => CupertinoAlertDialog(
               title: Text('Import Data'),
-              content: Text('Found ${importedAccounts.length} accounts. This will replace all existing accounts. Continue?'),
+              content: Text(
+                'Found ${importedAccounts.length} accounts. This will replace all existing accounts. Continue?',
+              ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
+                CupertinoDialogAction(
+                  onPressed: () => Navigator.pop(ctx),
                   child: Text('Cancel'),
                 ),
-                FilledButton(
+                CupertinoDialogAction(
+                  isDefaultAction: true,
                   onPressed: () async {
-                    Navigator.pop(context);
+                    Navigator.pop(ctx);
                     await _dbHelper.clearAllAccounts();
                     for (final account in importedAccounts) {
                       await _dbHelper.insertAccount(account);
                     }
                     await _loadAccounts();
-                    
+
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(Icons.check_circle_rounded, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text('Data imported successfully'),
-                            ],
-                          ),
-                          backgroundColor: Colors.green,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      // Show success dialog
+                      showCupertinoDialog(
+                        context: context,
+                        builder: (ctx2) => CupertinoAlertDialog(
+                          title: Text("Success"),
+                          content: Text("Data imported successfully."),
+                          actions: [
+                            CupertinoDialogAction(
+                              isDefaultAction: true,
+                              onPressed: () => Navigator.pop(ctx2),
+                              child: Text("OK"),
+                            ),
+                          ],
                         ),
                       );
                     }
@@ -411,93 +383,112 @@ class _AuthenticatorHomeState extends State<AuthenticatorHome> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error_rounded, color: Colors.white),
-                SizedBox(width: 8),
-                Expanded(child: Text('Import failed: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: Text("Error"),
+            content: Text("Import failed: $e"),
+            actions: [
+              CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.pop(ctx),
+                child: Text("OK"),
+              ),
+            ],
           ),
         );
       }
     }
   }
 
-  void _showAddAccountDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AddAccountDialog(
-        onAccountAdded: _addAccount,
-      ),
-    );
-  }
-
-
+void _showAddAccountDialog() {
+  Navigator.of(context, rootNavigator: true).push(
+    CupertinoPageRoute(
+      fullscreenDialog: true, // This makes the page a modal dialog with a top-down animation
+      builder: (context) => AddAccountPage(onAccountAdded: _addAccount),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        title: Text(
-          'Authenticator',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: colorScheme.onSurface,
-          ),
-        ),
-        backgroundColor: colorScheme.surface,
-        elevation: 0,
-        actions: [
-          PopupMenuButton(
-            icon: Icon(Icons.more_vert_rounded),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('Authenticator'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize
+              .min, // Use min size to prevent the Row from taking up full width.
+          children: [
+            // The 'Add Account' button.
+            if (accounts.isNotEmpty)
+              CupertinoButton(
+                onPressed: _showAddAccountDialog,
+                padding: EdgeInsets.zero,
+                child: Icon(
+                  CupertinoIcons.add_circled,
+                  size: 28,
+                ), // Use a different icon for better visual balance.
+              ),
+            // The three-dot ellipsis button.
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              child: Icon(CupertinoIcons.ellipsis, size: 28),
+              onPressed: () {
+                showCupertinoModalPopup(
+                  context: context,
+                  builder: (BuildContext context) => CupertinoActionSheet(
+                    title: Text("Options"),
+                    actions: [
+                      CupertinoActionSheetAction(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _exportData();
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              CupertinoIcons.upload_circle,
+                              color: CupertinoColors.activeBlue,
+                            ),
+                            SizedBox(width: 8),
+                            Text("Export Data"),
+                          ],
+                        ),
+                      ),
+                      CupertinoActionSheetAction(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _importData();
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              CupertinoIcons.download_circle,
+                              color: CupertinoColors.activeBlue,
+                            ),
+                            SizedBox(width: 8),
+                            Text("Import Data"),
+                          ],
+                        ),
+                      ),
+                    ],
+                    cancelButton: CupertinoActionSheetAction(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      isDefaultAction: true,
+                      child: Text("Cancel"),
+                    ),
+                  ),
+                );
+              },
             ),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'export',
-                child: Row(
-                  children: [
-                    Icon(Icons.upload_rounded, color: colorScheme.primary),
-                    SizedBox(width: 12),
-                    Text('Export Data'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'import',
-                child: Row(
-                  children: [
-                    Icon(Icons.download_rounded, color: colorScheme.primary),
-                    SizedBox(width: 12),
-                    Text('Import Data'),
-                  ],
-                ),
-              ),
-            ],
-            onSelected: (value) {
-              if (value == 'export') {
-                _exportData();
-              } else if (value == 'import') {
-                _importData();
-              }
-            },
-          ),
-          SizedBox(width: 8),
-        ],
+          ],
+        ),
       ),
-      body: accounts.isEmpty
+      child: accounts.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -505,37 +496,43 @@ class _AuthenticatorHomeState extends State<AuthenticatorHome> {
                   Container(
                     padding: EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer,
+                      color: CupertinoColors.activeBlue,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      Icons.security_rounded,
+                      CupertinoIcons.lock_shield, // iOS-style icon
                       size: 64,
-                      color: colorScheme.onPrimaryContainer,
+                      color: CupertinoColors.white,
                     ),
                   ),
                   SizedBox(height: 24),
                   Text(
                     'No accounts added yet',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: colorScheme.onSurface,
+                    style: TextStyle(
+                      fontSize: 22,
                       fontWeight: FontWeight.w500,
+                      color: CupertinoColors.label,
                     ),
                   ),
                   SizedBox(height: 8),
                   Text(
                     'Add your first account to get started',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: CupertinoColors.secondaryLabel,
                     ),
                   ),
                   SizedBox(height: 32),
-                  FilledButton.icon(
+                  CupertinoButton.filled(
                     onPressed: _showAddAccountDialog,
-                    icon: Icon(Icons.add_rounded),
-                    label: Text('Add Account'),
-                    style: FilledButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.add, size: 20),
+                        SizedBox(width: 8),
+                        Text('Add Account'),
+                      ],
                     ),
                   ),
                 ],
@@ -554,15 +551,6 @@ class _AuthenticatorHomeState extends State<AuthenticatorHome> {
                 );
               },
             ),
-      floatingActionButton: accounts.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _showAddAccountDialog,
-              icon: Icon(Icons.add_rounded),
-              label: Text('Add Account'),
-              backgroundColor: colorScheme.primaryContainer,
-              foregroundColor: colorScheme.onPrimaryContainer,
-            )
-          : null,
     );
   }
 }
@@ -571,11 +559,8 @@ class AccountCard extends StatefulWidget {
   final TOTPAccount account;
   final VoidCallback onDelete;
 
-  const AccountCard({
-    Key? key,
-    required this.account,
-    required this.onDelete,
-  }) : super(key: key);
+  const AccountCard({Key? key, required this.account, required this.onDelete})
+    : super(key: key);
 
   @override
   State<AccountCard> createState() => _AccountCardState();
@@ -604,19 +589,32 @@ class _AccountCardState extends State<AccountCard> {
 
   void _updateCode() {
     setState(() {
-      _currentCode = TOTPGenerator.generateTOTP(widget.account.secret, digits: widget.account.digits);
-      _remainingSeconds = TOTPGenerator.getRemainingSeconds(period: widget.account.period);
+      _currentCode = TOTPGenerator.generateTOTP(
+        widget.account.secret,
+        digits: widget.account.digits,
+      );
+      _remainingSeconds = TOTPGenerator.getRemainingSeconds(
+        period: widget.account.period,
+      );
       _progress = _remainingSeconds / widget.account.period;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
+    return Container(
+      margin: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemGroupedBackground,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: EdgeInsets.all(20),
         child: Column(
@@ -631,80 +629,106 @@ class _AccountCardState extends State<AccountCard> {
                     children: [
                       if (widget.account.issuer.isNotEmpty)
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: colorScheme.secondaryContainer,
-                            borderRadius: BorderRadius.circular(8),
+                            color: CupertinoColors.systemBlue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             widget.account.issuer,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSecondaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .copyWith(
+                                  color: CupertinoColors.systemBlue,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
                         ),
-                      SizedBox(height: widget.account.issuer.isNotEmpty ? 8 : 0),
+                      SizedBox(
+                        height: widget.account.issuer.isNotEmpty ? 8 : 0,
+                      ),
                       Text(
                         widget.account.name,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: CupertinoTheme.of(context).textTheme.textStyle
+                            .copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: CupertinoColors.label,
+                            ),
                       ),
                     ],
                   ),
                 ),
-                PopupMenuButton(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    color: colorScheme.onSurfaceVariant,
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 44,
+                  child: Icon(
+                    CupertinoIcons.ellipsis_vertical,
+                    color: CupertinoColors.systemGrey,
+                    size: 20,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_rounded, color: colorScheme.error),
-                          SizedBox(width: 12),
-                          Text(
-                            'Delete',
-                            style: TextStyle(color: colorScheme.error),
+                  onPressed: () {
+                    showCupertinoModalPopup(
+                      context: context,
+                      builder: (context) => CupertinoActionSheet(
+                        actions: [
+                          CupertinoActionSheetAction(
+                            isDestructiveAction: true,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.delete,
+                                  color: CupertinoColors.destructiveRed,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Text('Delete'),
+                              ],
+                            ),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              showCupertinoDialog(
+                                context: context,
+                                builder: (dialogContext) => CupertinoAlertDialog(
+                                  title: Text("Delete Account"),
+                                  content: Text(
+                                    "Are you sure you want to delete this account?",
+                                  ),
+                                  actions: [
+                                    CupertinoDialogAction(
+                                      child: Text("Cancel"),
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext),
+                                    ),
+                                    CupertinoDialogAction(
+                                      isDestructiveAction: true,
+                                      child: Text("Delete"),
+                                      onPressed: () {
+                                        Navigator.pop(dialogContext);
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                              widget.onDelete();
+                                            });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text('Delete Account'),
-                          content: Text('Are you sure you want to delete this account?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text('Cancel'),
-                            ),
-                            FilledButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                widget.onDelete();
-                              },
-                              style: FilledButton.styleFrom(
-                                backgroundColor: colorScheme.error,
-                                foregroundColor: colorScheme.onError,
-                              ),
-                              child: Text('Delete'),
-                            ),
-                          ],
+                        cancelButton: CupertinoActionSheetAction(
+                          child: Text('Cancel'),
+                          onPressed: () => Navigator.pop(context),
                         ),
-                      );
-                    }
+                      ),
+                    );
                   },
                 ),
               ],
@@ -716,82 +740,61 @@ class _AccountCardState extends State<AccountCard> {
                   child: GestureDetector(
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: _currentCode));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.check_rounded, color: Colors.white, size: 16),
-                              SizedBox(width: 8),
-                              Text('Code copied to clipboard'),
-                            ],
-                          ),
-                          duration: Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
+                      showCupertinoSnackBar(
+                        context,
+                        'Code copied to clipboard',
                       );
                     },
                     child: Container(
-                      padding: EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                      padding: EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 20,
+                      ),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(16),
+                        color: CupertinoColors.systemBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: colorScheme.outline.withValues(alpha: 0.2),
+                          color: CupertinoColors.systemBlue.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
                       child: Text(
                         _formatCode(_currentCode),
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 4,
-                          fontFamily: 'monospace',
-                        ),
+                        style: CupertinoTheme.of(context).textTheme.textStyle
+                            .copyWith(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 4,
+                              fontFamily: 'SF Mono',
+                              color: CupertinoColors.systemBlue,
+                            ),
                         textAlign: TextAlign.center,
                       ),
                     ),
                   ),
                 ),
                 SizedBox(width: 12),
-                IconButton.filled(
+                CupertinoButton(
+                  padding: EdgeInsets.all(12),
+                  minSize: 48,
+                  borderRadius: BorderRadius.circular(12),
+                  color: CupertinoColors.systemGrey5,
+                  child: Icon(
+                    CupertinoIcons.doc_on_clipboard,
+                    color: CupertinoColors.systemBlue,
+                    size: 20,
+                  ),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: _currentCode));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_rounded, color: Colors.white, size: 16),
-                            SizedBox(width: 8),
-                            Text('Code copied to clipboard'),
-                          ],
-                        ),
-                        duration: Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    );
+                    showCupertinoSnackBar(context, 'Code copied to clipboard');
                   },
-                  icon: Icon(Icons.copy_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: colorScheme.secondaryContainer,
-                    foregroundColor: colorScheme.onSecondaryContainer,
-                  ),
-                  tooltip: 'Copy code',
                 ),
                 SizedBox(width: 12),
                 Container(
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
+                    color: CupertinoColors.systemGrey6,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Stack(
@@ -800,21 +803,27 @@ class _AccountCardState extends State<AccountCard> {
                       SizedBox(
                         width: 32,
                         height: 32,
-                        child: CircularProgressIndicator(
-                          value: _progress,
-                          strokeWidth: 3,
-                          backgroundColor: colorScheme.outline.withValues(alpha: 0.3),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            _remainingSeconds <= 5 ? colorScheme.error : colorScheme.primary,
+                        child: CustomPaint(
+                          painter: CupertinoCircularProgressPainter(
+                            progress: _progress,
+                            backgroundColor: CupertinoColors.systemGrey4,
+                            progressColor: _remainingSeconds <= 5
+                                ? CupertinoColors.destructiveRed
+                                : CupertinoColors.systemBlue,
+                            strokeWidth: 3,
                           ),
                         ),
                       ),
                       Text(
                         _remainingSeconds.toString(),
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: _remainingSeconds <= 5 ? colorScheme.error : colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: CupertinoTheme.of(context).textTheme.textStyle
+                            .copyWith(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _remainingSeconds <= 5
+                                  ? CupertinoColors.destructiveRed
+                                  : CupertinoColors.systemBlue,
+                            ),
                       ),
                     ],
                   ),
@@ -833,99 +842,192 @@ class _AccountCardState extends State<AccountCard> {
     }
     return code;
   }
+
+  // Helper function for showing Cupertino-style snackbar
+  void showCupertinoSnackBar(BuildContext context, String message) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Container(
+        margin: EdgeInsets.all(20),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemBackground.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: CupertinoColors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.checkmark_circle_fill,
+              color: CupertinoColors.systemGreen,
+              size: 16,
+            ),
+            SizedBox(width: 8),
+            Text(
+              message,
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                fontSize: 14,
+                color: CupertinoColors.label,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Auto dismiss after 2 seconds
+    Timer(Duration(seconds: 2), () {
+      Navigator.of(context, rootNavigator: true).pop();
+    });
+  }
 }
 
-class AddAccountDialog extends StatefulWidget {
-  final Function(TOTPAccount) onAccountAdded;
+// Custom Cupertino circular progress painter
+class CupertinoCircularProgressPainter extends CustomPainter {
+  final double progress;
+  final Color backgroundColor;
+  final Color progressColor;
+  final double strokeWidth;
 
-  const AddAccountDialog({Key? key, required this.onAccountAdded}) : super(key: key);
+  CupertinoCircularProgressPainter({
+    required this.progress,
+    required this.backgroundColor,
+    required this.progressColor,
+    this.strokeWidth = 3.0,
+  });
 
   @override
-  _AddAccountDialogState createState() => _AddAccountDialogState();
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - strokeWidth) / 2;
+
+    // Background circle
+    final backgroundPaint = Paint()
+      ..color = backgroundColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, backgroundPaint);
+
+    // Progress arc
+    if (progress > 0) {
+      final progressPaint = Paint()
+        ..color = progressColor
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+
+      const startAngle = -pi / 2; // Start from top
+      final sweepAngle = 2 * pi * progress;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        false,
+        progressPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(CupertinoCircularProgressPainter oldDelegate) {
+    return progress != oldDelegate.progress ||
+        backgroundColor != oldDelegate.backgroundColor ||
+        progressColor != oldDelegate.progressColor ||
+        strokeWidth != oldDelegate.strokeWidth;
+  }
 }
 
-class _AddAccountDialogState extends State<AddAccountDialog> {
+
+class AddAccountPage extends StatefulWidget {
+  final Function(TOTPAccount) onAccountAdded;
+
+  const AddAccountPage({Key? key, required this.onAccountAdded})
+      : super(key: key);
+
+  @override
+  _AddAccountPageState createState() => _AddAccountPageState();
+}
+
+class _AddAccountPageState extends State<AddAccountPage> {
   final _nameController = TextEditingController();
   final _issuerController = TextEditingController();
   final _secretController = TextEditingController();
 
+  void _addAccount() {
+    if (_nameController.text.isNotEmpty && _secretController.text.isNotEmpty) {
+      final account = TOTPAccount(
+        name: _nameController.text,
+        issuer: _issuerController.text,
+        secret: _secretController.text.toUpperCase(),
+      );
+      widget.onAccountAdded(account);
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      title: Text(
-        'Add Account',
-        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w600,
+  Widget build(BuildContext) {
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('Add Account'),
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+          onPressed: _addAccount,
         ),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Account Name',
-              hintText: 'e.g., john@example.com',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Manually Add Account",
+                style: CupertinoTheme.of(context).textTheme.navTitleTextStyle,
               ),
-              filled: true,
-              fillColor: colorScheme.surfaceContainerHighest,
-            ),
-          ),
-          SizedBox(height: 16),
-          TextField(
-            controller: _issuerController,
-            decoration: InputDecoration(
-              labelText: 'Issuer (Optional)',
-              hintText: 'e.g., Google, Facebook',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 16),
+              CupertinoTextField(
+                placeholder: "Account Name",
+                controller: _nameController,
+                padding: const EdgeInsets.all(12.0),
               ),
-              filled: true,
-              fillColor: colorScheme.surfaceContainerHighest,
-            ),
-          ),
-          SizedBox(height: 16),
-          TextField(
-            controller: _secretController,
-            decoration: InputDecoration(
-              labelText: 'Secret Key',
-              hintText: 'Base32 encoded secret',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                placeholder: "Issuer (optional)",
+                controller: _issuerController,
+                padding: const EdgeInsets.all(12.0),
               ),
-              filled: true,
-              fillColor: colorScheme.surfaceContainerHighest,
-            ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                placeholder: "Secret Key",
+                controller: _secretController,
+                padding: const EdgeInsets.all(12.0),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Enter the secret key for your account. This is a sequence of letters and numbers.',
+                style: TextStyle(color: CupertinoColors.systemGrey),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (_nameController.text.isNotEmpty && _secretController.text.isNotEmpty) {
-              final account = TOTPAccount(
-                name: _nameController.text,
-                issuer: _issuerController.text,
-                secret: _secretController.text.toUpperCase(),
-              );
-              widget.onAccountAdded(account);
-              Navigator.pop(context);
-            }
-          },
-          child: Text('Add'),
-        ),
-      ],
     );
   }
 }
