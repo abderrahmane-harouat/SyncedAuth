@@ -21,8 +21,10 @@ class AccountsRepository(context: Context) {
 
     private class Db(context: Context) : SQLiteOpenHelper(context, "authenticator.db", null, 2) {
         override fun onCreate(db: SQLiteDatabase) {
+            // IF NOT EXISTS: a database file placed here from outside the app (manual
+            // migration, restore) can already hold the table while user_version is 0.
             db.execSQL(
-                "CREATE TABLE accounts(" +
+                "CREATE TABLE IF NOT EXISTS accounts(" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "name TEXT NOT NULL, " +
                     "issuer TEXT NOT NULL, " +
@@ -32,11 +34,22 @@ class AccountsRepository(context: Context) {
                     "pinned INTEGER NOT NULL DEFAULT 0, " +
                     "sort_order INTEGER NOT NULL DEFAULT 0)"
             )
+            addLocalColumns(db)
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            if (oldVersion < 2) {
+            if (oldVersion < 2) addLocalColumns(db)
+        }
+
+        /** Adds `pinned` / `sort_order` to a Flutter-schema table; no-op if already present. */
+        private fun addLocalColumns(db: SQLiteDatabase) {
+            val columns = db.rawQuery("PRAGMA table_info(accounts)", null).use { c ->
+                buildSet { while (c.moveToNext()) add(c.getString(c.getColumnIndexOrThrow("name"))) }
+            }
+            if ("pinned" !in columns) {
                 db.execSQL("ALTER TABLE accounts ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+            }
+            if ("sort_order" !in columns) {
                 db.execSQL("ALTER TABLE accounts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
                 // Preserve the list the user saw before the update: alphabetical.
                 db.execSQL(
