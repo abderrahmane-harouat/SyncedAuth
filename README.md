@@ -1,161 +1,47 @@
-# TOTP Authenticator App
+# SyncedAuth
 
-A professional Flutter-based TOTP (Time-based One-Time Password) authenticator application with a clean, organized codebase.
-
-## Project Structure
-
-The project has been restructured into a professional, maintainable architecture:
-
-```
-lib/
-├── core/                   # Core app configuration
-│   └── app.dart           # Main app widget and theme configuration
-├── models/                # Data models
-│   └── totp_account.dart  # TOTP account data model
-├── screens/               # UI screens/pages
-│   ├── authenticator_home.dart  # Main home screen
-│   └── add_account_page.dart    # Add new account screen
-├── services/              # Business logic and services
-│   ├── database_helper.dart     # SQLite database operations
-│   └── totp_generator.dart      # TOTP code generation logic
-├── utils/                 # Utility functions
-│   └── cupertino_snackbar.dart  # Custom snackbar utility
-├── widgets/               # Reusable UI components
-│   └── account_card.dart        # Account display card widget
-└── main.dart             # App entry point
-```
+A TOTP (Time-based One-Time Password) authenticator for Android, built entirely with Jetpack Compose.
 
 ## Features
 
-- **TOTP Code Generation**: Generate time-based one-time passwords
-- **Account Management**: Add, view, and delete authenticator accounts
-- **Search Functionality**: Real-time search through accounts with smooth animations
-- **Data Persistence**: SQLite database for secure local storage
-- **Import/Export**: Backup and restore accounts via JSON files
-- **iOS-style UI**: Native Cupertino design components
-- **Real-time Updates**: Live countdown timers and code refresh
-- **Arabic Support**: RTL text support and Arabic interface
+- **TOTP codes**: 6/8-digit codes with live countdown ring and "next code" preview
+- **QR setup**: scan two-factor setup QR codes (`otpauth://`) or Google Authenticator
+  transfer QR codes (`otpauth-migration://`) with the camera, or decode a QR from a
+  screenshot; HOTP and SHA-256/512 entries are skipped with an explanation
+- **Real brand logos**: every known service shows its authentic logo, bundled in the APK (no network)
+- **Pin & reorder**: pin accounts to the top; long-press a card to drag-reorder
+- **Swipe actions**: swipe a card left to delete, right to pin/unpin; deletion asks for confirmation
+- **Search**: instant filtering with match highlighting
+- **Import/Export**: backup and restore accounts as JSON via the system file picker
+- **Light & dark theme**
 
-## Architecture Benefits
+## Project structure
 
-### 1. **Separation of Concerns**
-- Models handle data structure
-- Services manage business logic
-- Screens focus on UI presentation
-- Widgets provide reusable components
+```
+app/src/main/kotlin/com/harouat/syncedauth/
+├── MainActivity.kt          # Entry point + simple home/add/scan routing
+├── MainViewModel.kt         # Account list state, reorder, import/export
+├── data/                    # Account model, storage, backup codec
+├── otpauth/                 # QR payload parsing (otpauth:// + GA migration protobuf)
+├── totp/Totp.kt             # TOTP (HMAC-SHA1) implementation
+└── ui/
+    ├── theme/               # Design tokens (colors, typography)
+    ├── components/          # CodeCard, ServiceTile, CountdownRing, buttons…
+    └── screens/             # HomeScreen, AddAccountScreen, QrScanScreen
+```
 
-### 2. **Maintainability**
-- Easy to locate and modify specific functionality
-- Clear dependencies between components
-- Simplified testing and debugging
+Brand assets live in `app/src/main/res/` (`drawable/ic_brand_*.xml` vector marks,
+`drawable-nodpi/brand_*.png` full-color logos).
 
-### 3. **Scalability**
-- Easy to add new features
-- Modular structure supports team development
-- Clean import statements and dependencies
-
-### 4. **Professional Standards**
-- Follows Flutter best practices
-- Consistent naming conventions
-- Proper file organization
-
-## Getting Started
-
-1. **Prerequisites**
-   ```bash
-   flutter --version  # Ensure Flutter is installed
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-3. **Run the App**
-   ```bash
-   flutter run
-   ```
-
-## Key Components
-
-### Models
-- `TOTPAccount`: Data structure for authenticator accounts with JSON serialization
-
-### Services
-- `TOTPGenerator`: Handles TOTP algorithm implementation and code generation
-- `DatabaseHelper`: Manages SQLite operations for data persistence
-
-### Screens
-- `AuthenticatorHome`: Main interface showing all accounts and management options
-- `AddAccountPage`: Form for manually adding new authenticator accounts
-
-### Widgets
-- `AccountCard`: Displays individual account with live TOTP codes and controls
-
-## Development Setup
-
-### Setting up Icon
+## Build
 
 ```bash
-flutter pub add flutter_launcher_icons
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Add to `pubspec.yaml`:
-```yaml
-flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: true
-  image_path: "assets/icons/icon.png"
-  min_sdk_android: 21
-  web:
-    generate: true
-    image_path: "assets/icons/icon.png"
-    background_color: "#hexcode"
-    theme_color: "#hexcode"
-  windows:
-    generate: true
-    image_path: "assets/icons/icon.png"
-    icon_size: 48
-  macos:
-    generate: true
-    image_path: "assets/icons/icon.png"
-```
+## Credits
 
-Generate icons:
-```bash
-dart run flutter_launcher_icons
-```
-
-### Build for Android
-
-```bash
-flutter build apk --split-per-abi
-```
-
-## Technical Details
-
-- **Database**: SQLite with sqflite package
-- **UI Framework**: Flutter Cupertino (iOS-style)
-- **Cryptography**: HMAC-SHA1 for TOTP generation
-- **File Operations**: Import/export functionality with file_picker
-- **State Management**: StatefulWidget with proper lifecycle management
-
-## TODO
-
-- [X] Making the full app in Arabic
-- [X] Restructuring code into professional architecture
-- [X] Adding search functionality with smooth animations
-- [ ] Adding QR code scanning
-- [ ] Implementing biometric authentication
-- [ ] Adding cloud backup options
-
-## Development
-
-The restructured codebase makes it easy to:
-- Add new authenticator features
-- Implement additional security measures
-- Extend UI components
-- Add new import/export formats
-- Integrate with cloud services
-
-This professional structure ensures the app is maintainable, testable, and ready for production deployment. 
+Brand logos: [Simple Icons](https://simpleicons.org) (CC0) and
+[gilbarbara/logos](https://github.com/gilbarbara/logos) (CC0). Drag-to-reorder uses
+[Reorderable](https://github.com/Calvin-LL/Reorderable) by Calvin Lau.
