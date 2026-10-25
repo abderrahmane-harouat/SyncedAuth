@@ -421,7 +421,7 @@ fun HomeScreen(
                 }
                 Spacer(Modifier.height(24.dp))
                 Text(
-                    text = "SyncedAuth v1.0 · ${accounts.size} accounts",
+                    text = "SyncedAuth v0.1.0 · ${accounts.size} accounts",
                     style = SaType.caption,
                     color = sa.textPlaceholder,
                     modifier = Modifier
