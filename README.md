@@ -45,3 +45,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 Brand logos: [Simple Icons](https://simpleicons.org) (CC0) and
 [gilbarbara/logos](https://github.com/gilbarbara/logos) (CC0). Drag-to-reorder uses
 [Reorderable](https://github.com/Calvin-LL/Reorderable) by Calvin Lau.
+
+## License
+
+SyncedAuth is released under the [MIT License](LICENSE). Brand names and logos are
+trademarks of their respective owners and are not covered by this license.
